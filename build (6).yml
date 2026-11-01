@@ -1,0 +1,56 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack the source zip
+        run: unzip -q -o lunarvoid-src.zip -d src
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: false
+
+      - name: Install Android SDK pieces
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # All build steps live in the zip (ci/*.sh), so this file never needs editing again.
+      - name: Make APK OLD
+        run: bash src/ci/old.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APK-OLD-engine
+          path: src/app/build/outputs/apk/old/debug/app-old-debug.apk
+
+      - name: Make APK NEXT
+        id: next
+        continue-on-error: true
+        run: bash src/ci/next.sh
+
+      - uses: actions/upload-artifact@v4
+        if: steps.next.outcome == 'success'
+        with:
+          name: APK-NEXT-engine
+          path: src/app/build/outputs/apk/next/debug/app-next-debug.apk
+          if-no-files-found: warn
